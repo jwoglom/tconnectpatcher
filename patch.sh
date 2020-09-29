@@ -1,11 +1,5 @@
 #!/bin/bash
 
-INPUT_APK=$1
-if [ "$INPUT_APK" == "" ]; then
-    echo "ERROR: Please specify an input APK." 1>&2;
-    exit -1
-fi
-
 FAILED_PREREQS=0
 if [[ "$(which python3)" == "" ]]; then
     echo "ERROR: You do not have python3 installed." 1>&2;
@@ -36,6 +30,25 @@ fi
 
 if [[ "$FAILED_PREREQS" == "1" ]]; then
     echo "Failed prereqs. Exiting."
+    exit -1
+fi
+
+EXPECTED_PACKAGE=com.tandemdiabetes.tconnect
+EXPECTED_APK_VERSION=1.2
+echo "   t:connect Patcher: version $EXPECTED_APK_VERSION   "
+echo " github.com/jwoglom/tconnectpatcher "
+echo "------------------------------------"
+echo ""
+echo "This is a patcher utility which adds additional configuration"
+echo "options to the Tandem Diabetes t:connect Android app."
+echo ""
+echo "Currently only version $EXPECTED_APK_VERSION is supported."
+echo ""
+
+INPUT_APK=$1
+if [ "$INPUT_APK" == "" ]; then
+    echo "ERROR: Please specify an APK." 1>&2;
+    echo "This APK should be $EXPECTED_PACKAGE version $EXPECTED_APK_VERSION"
     exit -1
 fi
 
@@ -94,10 +107,41 @@ if [[ "$DO_EXTRACT" == "y" ]]; then
     apktool d --use-aapt2 -o "$EXTRACT_FOLDER" "$INPUT_APK"
 fi
 
+MANIFEST_XML=$EXTRACT_FOLDER/AndroidManifest.xml
+python3 -c "
+import sys
+import xml.etree.ElementTree as etree
+schema = 'http://schemas.android.com/apk/res/android'
+etree.register_namespace('android', schema)
+et = etree.parse('$MANIFEST_XML')
+root = et.getroot()
+if root.attrib['package'].lower() != '$EXPECTED_PACKAGE'.lower():
+    print('Found package ID:', root.attrib['package'])
+    sys.exit(-1)
+else:
+    print('Package ID matches')
+    sys.exit(0)
+" || {
+    echo ""
+    echo "ERROR: The APK provided has an unexpected package name. The patcher will not work properly." 1>&2;
+    echo "Please pass an APK with package name $EXPECTED_PACKAGE to this tool." 1>&2;
+    exit -1
+}
+
+APK_VERSION=$(grep 'versionName:' extract_tconnect-v1.2/apktool.yml | sed "s/\(.*\)\: ['\"]\(.*\)['\"]/\2/")
+
+if [[ "$APK_VERSION" != "$EXPECTED_APK_VERSION" ]]; then
+    echo ""
+    echo "WARNING: The APK provided has an unexpected version. The patcher may not work properly." 1>&2;
+    echo "Found version: $APK_VERSION" 1>&2;
+    echo "Expected version: $EXPECTED_APK_VERSION" 1>&2;
+    echo ""
+fi
+
+
 
 echo "Applying APK modifications..."
 
-MANIFEST_XML=$EXTRACT_FOLDER/AndroidManifest.xml
 if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_SECURITY_CONFIG" == "y" ]]; then
     echo "Applying AndroidManifest patches"
 
