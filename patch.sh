@@ -128,7 +128,7 @@ else:
     exit -1
 }
 
-APK_VERSION=$(grep 'versionName:' extract_tconnect-v1.2/apktool.yml | sed "s/\(.*\)\: ['\"]\(.*\)['\"]/\2/")
+APK_VERSION=$(grep 'versionName:' $EXTRACT_FOLDER/apktool.yml | sed "s/\(.*\)\: ['\"]\(.*\)['\"]/\2/")
 
 if [[ "$APK_VERSION" != "$EXPECTED_APK_VERSION" ]]; then
     echo ""
