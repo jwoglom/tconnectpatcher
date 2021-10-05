@@ -34,15 +34,21 @@ if [[ "$FAILED_PREREQS" == "1" ]]; then
 fi
 
 EXPECTED_PACKAGE=com.tandemdiabetes.tconnect
-EXPECTED_APK_VERSION=1.2
-echo "   t:connect Patcher: version $EXPECTED_APK_VERSION   "
+APK_VERSION_1_2="1.2"
+APK_VERSION_1_4="1.4 (c8)"
+EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2" "$APK_VERSION_1_4")
+
+echo "   t:connect Patcher: version 1.4   "
 echo " github.com/jwoglom/tconnectpatcher "
 echo "------------------------------------"
 echo ""
 echo "This is a patcher utility which adds additional configuration"
 echo "options to the Tandem Diabetes t:connect Android app."
 echo ""
-echo "Currently only version $EXPECTED_APK_VERSION is supported."
+echo "Currently only the following versions are supported:"
+for v in "${EXPECTED_APK_VERSIONS[@]}"; do
+    echo " - $v"
+done
 echo ""
 
 INPUT_APK=$1
@@ -56,7 +62,7 @@ echo "Input APK: $INPUT_APK"
 echo ""
 echo "-------------------- PATCH OPTIONS --------------------"
 read -p "<!> Would you like to make the APK debuggable? [Y/n] " PATCH_DEBUGGABLE
-if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_DEBUGGABLE" == "Y" ]]; then
+if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_DEBUGGABLE" == "Y" || "$PATCH_DEBUGGABLE" == "" ]]; then
     echo "Okay, making the APK debuggable."
     PATCH_DEBUGGABLE=y
 else
@@ -76,6 +82,9 @@ echo ""
 read -p "<!> How often (in minutes) should t:connect upload data to the cloud? [default: 60] " PATCH_UPLOAD_MINS
 if [[ "$PATCH_UPLOAD_MINS" == "60" ]]; then
     echo "Will not update data upload rate."
+elif [[ "$PATCH_UPLOAD_MINS" == "" ]]; then
+    PATCH_UPLOAD_MINS=60
+    echo "Will not update data upload rate."
 else
     echo "Okay, will change the data upload rate to $PATCH_UPLOAD_MINS minutes"
 fi
@@ -91,7 +100,7 @@ echo "Extracting APK to $EXTRACT_FOLDER"
 DO_EXTRACT=y
 if [ -d "$EXTRACT_FOLDER" ]; then
     echo "Folder $EXTRACT_FOLDER already exists."
-    read -p "<!> Do you want to delete it and re-extract? [Y/n] " DO_EXTRACT
+    read -p "<!> Do you want to delete it and re-extract? [y/N] " DO_EXTRACT
     if [[ "$DO_EXTRACT" == "y" || "$DO_EXTRACT" == "Y" ]]; then
         echo "Deleting $EXTRACT_FOLDER"
         rm -rf "$EXTRACT_FOLDER"
@@ -128,13 +137,20 @@ else:
     exit -1
 }
 
-APK_VERSION=$(grep 'versionName:' $EXTRACT_FOLDER/apktool.yml | sed "s/\(.*\)\: ['\"]\(.*\)['\"]/\2/")
+APK_VERSION=$(grep 'versionName:' $EXTRACT_FOLDER/apktool.yml | sed "s/\(.*\)\: \(.*\)/\2/" | tr -d '"' | tr -d "'")
 
-if [[ "$APK_VERSION" != "$EXPECTED_APK_VERSION" ]]; then
+version_ok=false
+for v in "$EXPECTED_APK_VERSIONS{@}"; do
+    if [[ "$APK_VERSION" == "$v" ]]; then
+        version_ok=true
+    fi
+done
+
+if [[ "$version_ok" == "false" ]]; then
     echo ""
     echo "WARNING: The APK provided has an unexpected version. The patcher may not work properly." 1>&2;
     echo "Found version: $APK_VERSION" 1>&2;
-    echo "Expected version: $EXPECTED_APK_VERSION" 1>&2;
+    echo "Expected versions: ${EXPECTED_APK_VERSIONS[@]}" 1>&2;
     echo ""
 fi
 
@@ -208,12 +224,14 @@ fi
 if [[ "$PATCH_UPLOAD_MINS" != "60" ]]; then
     echo "Applying data upload rate patch"
 
-    # com.tandemdiabetes.tconnect.p088a.AppComponentStore
-    APP_COMPONENT_STORE_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/tconnect/a/a.smali
-    # private final long OneHourInMillis = 3600000
-    OLD_INSTRUCTION_PREFIX="const-wide/32 p1,"
-    OLD_INSTRUCTION_VALUE="0x36ee80"
-    python3 -c "
+    if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
+        # com.tandemdiabetes.tconnect.p088a.AppComponentStore
+        APP_COMPONENT_STORE_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/tconnect/a/a.smali
+        # private final long OneHourInMillis = 3600000
+        OLD_INSTRUCTION_PREFIX="const-wide/32 p1,"
+        OLD_INSTRUCTION_VALUE="0x36ee80" # 3600000
+
+        python3 -c "
 orig = open('$APP_COMPONENT_STORE_SMALI').read()
 old = '$OLD_INSTRUCTION_PREFIX $OLD_INSTRUCTION_VALUE'
 if old in orig:
@@ -224,12 +242,57 @@ if old in orig:
 else:
     print('Could not find '+old+' in $APP_COMPONENT_STORE_SMALI -- it may have already been patched.')
 "
+    elif [[ "$APK_VERSION" == "$APK_VERSION_1_4" ]]; then
+        # AppComponentStore.kt Runnable
+        APP_COMPONENT_STORE_RUNNABLE_SMALI=$EXTRACT_FOLDER/smali_classes2/com/tandemdiabetes/tconnect/a/a\$d.smali
+        # new PeriodicWorkRequest.Builder(PeriodicUploadTriggerWorker.class, 60, TimeUnit.MINUTES)
+        OLD_INSTRUCTION_PREFIX="const-wide/16 v5,"
+        OLD_INSTRUCTION_VALUE="0x3c" # 60
+
+        python3 -c "
+orig = open('$APP_COMPONENT_STORE_RUNNABLE_SMALI').read()
+old = '$OLD_INSTRUCTION_PREFIX $OLD_INSTRUCTION_VALUE'
+if old in orig:
+    val = hex(int($PATCH_UPLOAD_MINS))
+    orig = orig.replace(old, '$OLD_INSTRUCTION_PREFIX ' + str(val))
+    print('Replaced $OLD_INSTRUCTION_VALUE with ' + str(val))
+    open('$APP_COMPONENT_STORE_RUNNABLE_SMALI', 'w').write(orig)
+else:
+    print('Could not find '+old+' in $APP_COMPONENT_STORE_RUNNABLE_SMALI -- it may have already been patched.')
+"
+    else
+        echo "ERROR: unable to perform upload patch on this version."
+        exit -1
+    fi
+fi
+
+if [[ "$APK_VERSION" == "$APK_VERSION_1_4" ]]; then
+    echo "Nullifying MessageGuardException..."
+
+    PROTECTED_APP_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/tconnect/ProtectedApp.smali
+
+    MESSAGE_GUARD_INVOCATION_1='invoke-direct {v1, v2, v0}, Lcom/tandemdiabetes/tconnect/MessageGuardException;-><init>(Ljava/lang/String;Ljava/lang/Throwable;)V\n\n    throw v1'
+    MESSAGE_GUARD_INVOCATION_2='invoke-direct {v4, v5, v1}, Lcom/tandemdiabetes/tconnect/MessageGuardException;-><init>(Ljava/lang/String;Ljava/lang/Throwable;)V\n\n    throw v4'
+    python3 -c "
+orig = open('$PROTECTED_APP_SMALI').read()
+a = '$MESSAGE_GUARD_INVOCATION_1'
+b = '$MESSAGE_GUARD_INVOCATION_2'
+if a in orig and b in orig:
+    orig = orig.replace(a, 'return-void')
+    orig = orig.replace(b, 'return-void')
+    print('Removed '+a)
+    print('Removed '+b)
+
+    open('$PROTECTED_APP_SMALI', 'w').write(orig)
+else:
+    print('Could not find '+a+' or '+b+' in $PROTECTED_APP_SMALI -- it may have already been patched.')
+"
 fi
 
 echo "Done patching source files. You can make any other modifications now."
 echo ""
 read -p "<!> Continue to generate debug APK? [Y/n] " CONTINUE
-if [[ "$CONTINUE" == "y" || "$CONTINUE" == "Y" ]]; then
+if [[ "$CONTINUE" == "y" || "$CONTINUE" == "Y" || "$CONTINUE" == "" ]]; then
     echo "Okay. continuing."
 else
     exit -1;
@@ -265,24 +328,32 @@ echo ""
 echo "IMPORTANT: If you currently have a release version of the t:connect app installed,"
 echo "you MUST uninstall it before installing the patched version."
 echo ""
+echo "Please plug in your Android device and enable USB debugging in settings."
+echo ""
 read -p "<!> Would you like to install the patched APK now? [y/N] " INSTALL_NOW
 if [[ "$INSTALL_NOW" == "y" || "$INSTALL_NOW" == "Y" ]]; then
     echo "Okay, running adb install"
-    tmpfile=$(mktemp)
-    (adb install $DEBUG_APK 2>&1 ) | tee $tmpfile
-    if grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE" $tmpfile; then
-        read -p "<!> The package was not installed. Would you like to delete the existing t:connect application and reinstall? [Y/n]" REINSTALL
-        if [[ "$REINSTALL" == "y" || "$REINSTALL" == "Y" ]]; then
-            adb uninstall com.tandemdiabetes.tconnect
-            echo "Retrying install..."
-            adb install $DEBUG_APK
-        else
-            exit 1
+    if [[ "$(which python3)" == "" ]]; then
+        echo "ERROR: You do not have adb installed, so cannot install the APK directly." 1>&2;
+        echo "You can upload the apk file to your phone and install it manually." 1>&2;
+    else
+        tmpfile=$(mktemp)
+        (adb install $DEBUG_APK 2>&1 ) | tee $tmpfile
+        if grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE" $tmpfile; then
+            read -p "<!> The package was not installed. Would you like to delete the existing t:connect application and reinstall? [Y/n]" REINSTALL
+            if [[ "$REINSTALL" == "y" || "$REINSTALL" == "Y" ]]; then
+                adb uninstall com.tandemdiabetes.tconnect
+                echo "Retrying install..."
+                adb install $DEBUG_APK
+            else
+                exit 1
+            fi
         fi
-    fi
 
-    echo "All set!"
+        echo "All set!"
+    fi
 fi
 
+echo ""
 echo "You'll need to re-login to the app, and also un-pair and re-pair your pump to your phone."
 echo "Thanks for using this tool!"
