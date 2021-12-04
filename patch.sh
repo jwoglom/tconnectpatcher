@@ -34,7 +34,7 @@ if [[ "$FAILED_PREREQS" == "1" ]]; then
 fi
 
 EXPECTED_PACKAGE=com.tandemdiabetes.tconnect
-EXPECTED_APK_VERSION=1.2
+EXPECTED_APK_VERSION=1.6
 echo "   t:connect Patcher: version $EXPECTED_APK_VERSION   "
 echo " github.com/jwoglom/tconnectpatcher "
 echo "------------------------------------"
@@ -207,9 +207,8 @@ fi
 
 if [[ "$PATCH_UPLOAD_MINS" != "60" ]]; then
     echo "Applying data upload rate patch"
-
     # com.tandemdiabetes.tconnect.p088a.AppComponentStore
-    APP_COMPONENT_STORE_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/tconnect/a/a.smali
+    APP_COMPONENT_STORE_SMALI=$EXTRACT_FOLDER/smali_classes2/com/tandemdiabetes/tconnect/a/a.smali
     # private final long OneHourInMillis = 3600000
     OLD_INSTRUCTION_PREFIX="const-wide/32 p1,"
     OLD_INSTRUCTION_VALUE="0x36ee80"
