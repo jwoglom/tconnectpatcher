@@ -1,3 +1,8 @@
+# 1.6 Quick Fix
+Changed to correct file location where the time is located.
+seems to be working on my TConnect V1.6 as of 12/3/2021 with 24 Hours of testing.
+Left everything default aside from the Uploader Interval 
+
 # tconnectpatcher
 Tconnectpatcher patches the t:connect Android app to upload data via their API more frequently.
 It is written in bash, and should work on any Linux/Unix/MacOS system.
