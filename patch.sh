@@ -36,7 +36,8 @@ fi
 EXPECTED_PACKAGE=com.tandemdiabetes.tconnect
 APK_VERSION_1_2="1.2"
 APK_VERSION_1_4="1.4 (c8)"
-EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2" "$APK_VERSION_1_4")
+APK_VERSION_1_6="1.6 (11a)"
+EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2" "$APK_VERSION_1_4" "$APK_VERSION_1_6")
 
 echo "   t:connect Patcher: version 1.4   "
 echo " github.com/jwoglom/tconnectpatcher "
@@ -54,7 +55,7 @@ echo ""
 INPUT_APK=$1
 if [ "$INPUT_APK" == "" ]; then
     echo "ERROR: Please specify an APK." 1>&2;
-    echo "This APK should be $EXPECTED_PACKAGE version $EXPECTED_APK_VERSION"
+    echo "This APK should be $EXPECTED_PACKAGE"
     exit -1
 fi
 
@@ -94,7 +95,7 @@ echo ""
 echo "Beginning patch..."
 
 EXTRACT_FOLDER="extract_$(basename $INPUT_APK | sed 's/.apk//')"
-DEBUG_APK=$(basename $INPUT_APK | sed 's/.apk/-debug.apk/')
+PATCHED_APK=$(basename $INPUT_APK | sed 's/.apk/-patched.apk/')
 
 echo "Extracting APK to $EXTRACT_FOLDER"
 DO_EXTRACT=y
@@ -140,7 +141,7 @@ else:
 APK_VERSION=$(grep 'versionName:' $EXTRACT_FOLDER/apktool.yml | sed "s/\(.*\)\: \(.*\)/\2/" | tr -d '"' | tr -d "'")
 
 version_ok=false
-for v in "$EXPECTED_APK_VERSIONS{@}"; do
+for v in "${EXPECTED_APK_VERSIONS[@]}"; do
     if [[ "$APK_VERSION" == "$v" ]]; then
         version_ok=true
     fi
@@ -152,27 +153,31 @@ if [[ "$version_ok" == "false" ]]; then
     echo "Found version: $APK_VERSION" 1>&2;
     echo "Expected versions: ${EXPECTED_APK_VERSIONS[@]}" 1>&2;
     echo ""
+else
+    echo "Found APK version $APK_VERSION"
 fi
 
 
 
 echo "Applying APK modifications..."
 
-if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_SECURITY_CONFIG" == "y" ]]; then
-    echo "Applying AndroidManifest patches"
+echo "Applying AndroidManifest patches"
 
-    ATTRIB_PATCHES="'android:extractNativeLibs': 'true', "
-    if [[ "$PATCH_DEBUGGABLE" == "y" ]]; then
-        ATTRIB_PATCHES="${ATTRIB_PATCHES}'android:allowBackup': 'true', 'android:debuggable': 'true', "
-    fi
+# Fix 'Failure [INSTALL_FAILED_INVALID_APK: Failed to extract native libraries, res=-2]'
+# see https://github.com/iBotPeaches/Apktool/issues/1626
+ATTRIB_PATCHES="'android:extractNativeLibs': 'true', "
 
-    if [[ "$PATCH_SECURITY_CONFIG" == "y" ]]; then
-        ATTRIB_PATCHES="${ATTRIB_PATCHES}'android:networkSecurityConfig': '@xml/network_security_config', "
-    fi
+if [[ "$PATCH_DEBUGGABLE" == "y" ]]; then
+    ATTRIB_PATCHES="${ATTRIB_PATCHES}'android:allowBackup': 'true', 'android:debuggable': 'true', "
+fi
 
-    echo "Applying patches: $ATTRIB_PATCHES"
+if [[ "$PATCH_SECURITY_CONFIG" == "y" ]]; then
+    ATTRIB_PATCHES="${ATTRIB_PATCHES}'android:networkSecurityConfig': '@xml/network_security_config', "
+fi
 
-    python3 -c "
+echo "Applying patches: $ATTRIB_PATCHES"
+
+python3 -c "
 import xml.etree.ElementTree as etree
 schema = 'http://schemas.android.com/apk/res/android'
 etree.register_namespace('android', schema)
@@ -190,13 +195,13 @@ for child in et.getroot():
                 del child.attrib[rawfield]
         child.attrib.update(patches)
 et.write('$MANIFEST_XML' + '_new', encoding='utf-8', xml_declaration=True)
-    "
-    if [ ! -f "${MANIFEST_XML}_new" ]; then
-        echo "ERROR: Updated manifest file was not generated. Exiting."
-        exit -1
-    fi
-    mv ${MANIFEST_XML}_new $MANIFEST_XML
+"
+if [ ! -f "${MANIFEST_XML}_new" ]; then
+    echo "ERROR: Updated manifest file was not generated. Exiting."
+    exit -1
 fi
+mv ${MANIFEST_XML}_new $MANIFEST_XML
+
 
 if [[ "$PATCH_SECURITY_CONFIG" == "y" ]]; then
     echo "Adding network_security_config"
@@ -260,12 +265,31 @@ if old in orig:
 else:
     print('Could not find '+old+' in $APP_COMPONENT_STORE_RUNNABLE_SMALI -- it may have already been patched.')
 "
+    elif [[ "$APK_VERSION" == "$APK_VERSION_1_6" ]]; then
+        # AppComponentStore.kt Runnable
+        APP_COMPONENT_STORE_RUNNABLE_SMALI=$EXTRACT_FOLDER/smali_classes2/com/tandemdiabetes/tconnect/a/a\$d.smali
+        # new PeriodicWorkRequest.Builder(PeriodicUploadTriggerWorker.class, 60, TimeUnit.MINUTES)
+        OLD_INSTRUCTION_PREFIX="const-wide/16 v5,"
+        OLD_INSTRUCTION_VALUE="0x3c" # 60
+
+        python3 -c "
+orig = open('$APP_COMPONENT_STORE_RUNNABLE_SMALI').read()
+old = '$OLD_INSTRUCTION_PREFIX $OLD_INSTRUCTION_VALUE'
+if old in orig:
+    val = hex(int($PATCH_UPLOAD_MINS))
+    orig = orig.replace(old, '$OLD_INSTRUCTION_PREFIX ' + str(val))
+    print('Replaced $OLD_INSTRUCTION_VALUE with ' + str(val))
+    open('$APP_COMPONENT_STORE_RUNNABLE_SMALI', 'w').write(orig)
+else:
+    print('Could not find '+old+' in $APP_COMPONENT_STORE_RUNNABLE_SMALI -- it may have already been patched.')
+"
     else
         echo "ERROR: unable to perform upload patch on this version."
         exit -1
     fi
 fi
 
+# This doesn't allow the app to launch.
 if [[ "$APK_VERSION" == "$APK_VERSION_1_4" ]]; then
     echo "Nullifying MessageGuardException..."
 
@@ -289,20 +313,58 @@ else:
 "
 fi
 
+# This doesn't allow the app to launch.
+if [[ "$APK_VERSION" == "$APK_VERSION_1_6" ]]; then
+    echo "Nullifying MessageGuardException..."
+
+    PROTECTED_APP_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/tconnect/ProtectedApp.smali
+
+    MESSAGE_GUARD_INVOCATION_1='new-instance v0, Lcom/tandemdiabetes/tconnect/MessageGuardException;'
+    MESSAGE_GUARD_INVOCATION_2='sget-object v1, Lcom/tandemdiabetes/tconnect/ProtectedApp;->dD:Ljava/lang/String;'
+    MESSAGE_GUARD_INVOCATION_3='invoke-direct {v0, p1, v1}, Lcom/tandemdiabetes/tconnect/MessageGuardException;-><init>(Ljava/lang/Throwable;Ljava/lang/String;)V'
+    MESSAGE_GUARD_THROW='throw v0'
+    MESSAGE_GUARD_NATIVE_1='.method private static native jrthH([I)V'
+    MESSAGE_GUARD_NATIVE_1_REPL='.method private static jrthH([I)V\nreturn-void'
+    python3 -c "
+orig = open('$PROTECTED_APP_SMALI').read()
+a = '$MESSAGE_GUARD_INVOCATION_1'
+b = '$MESSAGE_GUARD_INVOCATION_2'
+c = '$MESSAGE_GUARD_INVOCATION_3'
+d = '$MESSAGE_GUARD_THROW'
+native1 = '$MESSAGE_GUARD_NATIVE_1'
+native1_repl = '$MESSAGE_GUARD_NATIVE_1_REPL'
+if a in orig and b in orig and c in orig and d in orig:
+    orig = orig.replace(a, '')
+    orig = orig.replace(b, '')
+    orig = orig.replace(c, '')
+    orig = orig.replace(d, 'return-void')
+    orig = orig.replace(native1, native1_repl)
+    print('Removed '+a)
+    print('Removed '+b)
+    print('Removed '+c)
+    print('Replaced '+c)
+
+    open('$PROTECTED_APP_SMALI', 'w').write(orig)
+else:
+    print('Could not find required strings in $PROTECTED_APP_SMALI -- it may have already been patched.')
+"
+fi
+
+
 echo "Done patching source files. You can make any other modifications now."
 echo ""
-read -p "<!> Continue to generate debug APK? [Y/n] " CONTINUE
+read -p "<!> Continue to generate patched APK? [Y/n] " CONTINUE
 if [[ "$CONTINUE" == "y" || "$CONTINUE" == "Y" || "$CONTINUE" == "" ]]; then
     echo "Okay. continuing."
 else
     exit -1;
 fi
 
-echo "Generating debug APK $DEBUG_APK"
-apktool b --use-aapt2 -o "$DEBUG_APK" "$EXTRACT_FOLDER"
+echo "Generating patched APK $PATCHED_APK"
+apktool b --use-aapt2 -o "$PATCHED_APK" "$EXTRACT_FOLDER"
 
-if [[ ! -f "$DEBUG_APK" ]]; then
-    echo "ERROR: apktool failed to generate a debug APK."
+if [[ ! -f "$PATCHED_APK" ]]; then
+    echo "ERROR: apktool failed to generate a patched APK."
     echo "Check the error output above."
     exit -1
 fi
@@ -319,11 +381,11 @@ else
     echo "Existing debug keystore found"
 fi
 
-echo "Signing debug APK..."
+echo "Signing patched APK..."
 echo "<!> When prompted, enter the password for $KEYSTORE"
-jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore "$KEYSTORE" "$DEBUG_APK" alias_name
+jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore "$KEYSTORE" "$PATCHED_APK" alias_name
 
-echo "Done! You can now install $DEBUG_APK on your device."
+echo "Done! You can now install $PATCHED_APK on your device."
 echo ""
 echo "IMPORTANT: If you currently have a release version of the t:connect app installed,"
 echo "you MUST uninstall it before installing the patched version."
@@ -338,13 +400,13 @@ if [[ "$INSTALL_NOW" == "y" || "$INSTALL_NOW" == "Y" ]]; then
         echo "You can upload the apk file to your phone and install it manually." 1>&2;
     else
         tmpfile=$(mktemp)
-        (adb install $DEBUG_APK 2>&1 ) | tee $tmpfile
+        (adb install $PATCHED_APK 2>&1 ) | tee $tmpfile
         if grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE" $tmpfile; then
             read -p "<!> The package was not installed. Would you like to delete the existing t:connect application and reinstall? [Y/n]" REINSTALL
             if [[ "$REINSTALL" == "y" || "$REINSTALL" == "Y" ]]; then
                 adb uninstall com.tandemdiabetes.tconnect
                 echo "Retrying install..."
-                adb install $DEBUG_APK
+                adb install $PATCHED_APK
             else
                 exit 1
             fi
