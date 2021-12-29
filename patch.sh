@@ -37,7 +37,7 @@ EXPECTED_PACKAGE=com.tandemdiabetes.tconnect
 APK_VERSION_1_2="1.2"
 APK_VERSION_1_4="1.4 (c8)"
 APK_VERSION_1_6="1.6 (11a)"
-EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2" "$APK_VERSION_1_4" "$APK_VERSION_1_6")
+EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2") # "$APK_VERSION_1_4" "$APK_VERSION_1_6")
 
 echo "   t:connect Patcher: version 1.4   "
 echo " github.com/jwoglom/tconnectpatcher "
@@ -88,6 +88,15 @@ elif [[ "$PATCH_UPLOAD_MINS" == "" ]]; then
     echo "Will not update data upload rate."
 else
     echo "Okay, will change the data upload rate to $PATCH_UPLOAD_MINS minutes"
+fi
+echo ""
+
+read -p "<!> Modify to log bluetooth data? [y/N] " PATCH_BT_LOGGING
+if [[ "$PATCH_BT_LOGGING" == "y" || "$PATCH_BT_LOGGING" == "Y" ]]; then
+    echo "Okay, will patch bluetooth logging."
+    PATCH_BT_LOGGING=y
+else
+    echo "Not patching bluetooth logging."
 fi
 echo ""
 
@@ -348,6 +357,38 @@ if a in orig and b in orig and c in orig and d in orig:
 else:
     print('Could not find required strings in $PROTECTED_APP_SMALI -- it may have already been patched.')
 "
+fi
+
+if [[ "$PATCH_BT_LOGGING" == "y" ]]; then
+    if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
+
+        BT_LOGGING_BEFORE='invoke-virtual {v1, v2}, Lcom/tandemdiabetes/ble/i/h;->a([B)V'
+        BT_LOGGING_CHECKSTRING='const-string v4, "BLEREAD"'
+        BT_LOGGING_ADDED='invoke-static {v2}, Lorg/apache/commons/codec/binary/Hex;->encodeHexString([B)Ljava/lang/String;
+    move-result-object v5
+    invoke-static {v1, v2}, Ltest$Log;->w(Ljava/lang/String;Ljava/lang/String;)V
+    const-string v4, "BLEREAD"
+    invoke-static {v4, v5}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I'
+
+
+        CONTROLLER_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/ble/daemon/'Controller$f.smali'
+        python3 -c "
+orig = open('$CONTROLLER_SMALI').read()
+before = '$BT_LOGGING_BEFORE'
+checkstring = '$BT_LOGGING_CHECKSTRING'
+after = '''$BT_LOGGING_BEFORE
+$BT_LOGGING_ADDED'''
+
+if before in orig and not checkstring in orig:
+    orig = orig.replace(before, after)
+    print('Added BT logging')
+
+    open('$CONTROLLER_SMALI', 'w').write(orig)
+else:
+    print('Could not find required strings in $CONTROLLER_SMALI -- it may have already been patched.')
+"
+
+    fi
 fi
 
 
