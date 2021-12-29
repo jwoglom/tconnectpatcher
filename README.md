@@ -7,12 +7,27 @@ To generate a "patched" APK, a valid APK of the [t:connect Android application](
 Currently only version 1.2, released in September 2020, is supported.
 You can extract this APK from an Android phone which has the application installed from the Play Store, [or find it on the internet](http://google.com/search?q=com.tandemdiabetes.tconnect+1.2+android+apk).
 
-Once you have the APK, run the tool with `./patch.sh path/to/downloaded.apk`.
+Once you have the APK, clone and cd into the repository and run `./patch.sh path/to/downloaded.apk`
+
+You'll be asked:
+
+* **How often (in minutes) should t:connect upload data to the cloud?** If you'd like to upload your pump data more frequently to the cloud, set this to, e.g., `5` or `15`
+
+From there, follow the steps to create a local debug keystore, build the APK, and then install it on your phone.
+
+## Advanced Usage
+
+To modify these options, run the tool with `./patch.sh path/to/downloaded.apk --advanced`
+
 You'll be prompted about several options:
 
 * **Would you like to make the APK debuggable?** This makes the Android app [debuggable](https://developer.android.com/guide/topics/manifest/application-element#debug). Defaults to yes.
-* **Would you like to disable certificate verification?** If set, this allows you to look at outgoing HTTPS connections made by the app. Defaults to no.
-* **How often (in minutes) should t:connect upload data to the cloud?** If you'd like to upload your pump data more frequently to the cloud, set this to 5 or 15 minutes!
+* **Would you like to disable certificate verification?** If set, this allows you to look at outgoing HTTPS connections made by the app. Defaults to yes.
+* **How often (in minutes) should t:connect upload data to the cloud?** If you'd like to upload your pump data more frequently to the cloud, set this to, e.g., `5` or `15`
+* **Modify to log bluetooth data?** If set, all bluetooth reads and writes are logged to `adb logcat` with tags `BLEREAD` and `BLEWRITE`. For use in logging phone-pump Bluetooth communication. Defaults to true.
+
+
+## Example
 
 Here is an example invocation of the tool:
 

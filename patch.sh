@@ -59,26 +59,49 @@ if [ "$INPUT_APK" == "" ]; then
     exit -1
 fi
 
+ADVANCED=n
+if [[ "$2" == "--advanced" ]]; then
+    ADVANCED=y
+fi
+
 echo "Input APK: $INPUT_APK"
 echo ""
 echo "-------------------- PATCH OPTIONS --------------------"
-read -p "<!> Would you like to make the APK debuggable? [Y/n] " PATCH_DEBUGGABLE
-if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_DEBUGGABLE" == "Y" || "$PATCH_DEBUGGABLE" == "" ]]; then
-    echo "Okay, making the APK debuggable."
-    PATCH_DEBUGGABLE=y
-else
-    echo "Not making the APK debuggable."
-fi
-echo ""
 
-read -p "<!> Would you like to disable certificate verification? [y/N] " PATCH_SECURITY_CONFIG
-if [[ "$PATCH_SECURITY_CONFIG" == "y" || "$PATCH_SECURITY_CONFIG" == "Y" ]]; then
-    echo "Okay, updating the APK security configuration."
-    PATCH_SECURITY_CONFIG=y
-else
-    echo "Not updating the APK security configuration."
+
+PATCH_DEBUGGABLE=y
+PATCH_SECURITY_CONFIG=y
+PATCH_BT_LOGGING=y
+if [[ "$ADVANCED" == "y" ]]; then
+    read -p "<!> Would you like to make the APK debuggable? [Y/n] " PATCH_DEBUGGABLE
+    if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_DEBUGGABLE" == "Y" || "$PATCH_DEBUGGABLE" == "" ]]; then
+        echo "Okay, making the APK debuggable."
+        PATCH_DEBUGGABLE=y
+    else
+        echo "Not making the APK debuggable."
+    fi
+    echo ""
+
+
+    read -p "<!> Would you like to disable certificate verification? [y/N] " PATCH_SECURITY_CONFIG
+    if [[ "$PATCH_SECURITY_CONFIG" == "y" || "$PATCH_SECURITY_CONFIG" == "Y" ]]; then
+        echo "Okay, updating the APK security configuration."
+        PATCH_SECURITY_CONFIG=y
+    else
+        echo "Not updating the APK security configuration."
+    fi
+    echo ""
+
+
+    read -p "<!> Modify to log bluetooth data? [y/N] " PATCH_BT_LOGGING
+    if [[ "$PATCH_BT_LOGGING" == "y" || "$PATCH_BT_LOGGING" == "Y" ]]; then
+        echo "Okay, will patch bluetooth logging."
+        PATCH_BT_LOGGING=y
+    else
+        echo "Not patching bluetooth logging."
+    fi
+    echo ""
 fi
-echo ""
 
 read -p "<!> How often (in minutes) should t:connect upload data to the cloud? [default: 60] " PATCH_UPLOAD_MINS
 if [[ "$PATCH_UPLOAD_MINS" == "60" ]]; then
@@ -88,15 +111,6 @@ elif [[ "$PATCH_UPLOAD_MINS" == "" ]]; then
     echo "Will not update data upload rate."
 else
     echo "Okay, will change the data upload rate to $PATCH_UPLOAD_MINS minutes"
-fi
-echo ""
-
-read -p "<!> Modify to log bluetooth data? [y/N] " PATCH_BT_LOGGING
-if [[ "$PATCH_BT_LOGGING" == "y" || "$PATCH_BT_LOGGING" == "Y" ]]; then
-    echo "Okay, will patch bluetooth logging."
-    PATCH_BT_LOGGING=y
-else
-    echo "Not patching bluetooth logging."
 fi
 echo ""
 
@@ -384,29 +398,56 @@ fi
 if [[ "$PATCH_BT_LOGGING" == "y" ]]; then
     if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
 
-        BT_LOGGING_BEFORE='invoke-virtual {v1, v2}, Lcom/tandemdiabetes/ble/i/h;->a([B)V'
-        BT_LOGGING_CHECKSTRING='const-string v4, "BLEREAD"'
-        BT_LOGGING_ADDED='invoke-static {v2}, Lorg/apache/commons/codec/binary/Hex;->encodeHexString([B)Ljava/lang/String;
+        echo "Adding Bluetooth read logging"
+
+        BT_LOGGING_READ_BEFORE='invoke-virtual {v1, v2}, Lcom/tandemdiabetes/ble/i/h;->a([B)V'
+        BT_LOGGING_READ_CHECKSTRING='const-string v4, "BLEREAD"'
+        BT_LOGGING_READ_ADDED='invoke-static {v2}, Lorg/apache/commons/codec/binary/Hex;->encodeHexString([B)Ljava/lang/String;
     move-result-object v5
     const-string v4, "BLEREAD"
     invoke-static {v4, v5}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I'
+        CONTROLLER_READ_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/ble/daemon/'Controller$f.smali'
 
-
-        CONTROLLER_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/ble/daemon/'Controller$f.smali'
         python3 -c "
-orig = open('$CONTROLLER_SMALI').read()
-before = '$BT_LOGGING_BEFORE'
-checkstring = '$BT_LOGGING_CHECKSTRING'
-after = '''$BT_LOGGING_BEFORE
-$BT_LOGGING_ADDED'''
+orig = open('$CONTROLLER_READ_SMALI').read()
+before = '$BT_LOGGING_READ_BEFORE'
+checkstring = '$BT_LOGGING_READ_CHECKSTRING'
+after = '''$BT_LOGGING_READ_BEFORE
+$BT_LOGGING_READ_ADDED'''
 
 if before in orig and not checkstring in orig:
     orig = orig.replace(before, after)
-    print('Added BT logging')
+    print('Added BT read logging')
 
-    open('$CONTROLLER_SMALI', 'w').write(orig)
+    open('$CONTROLLER_READ_SMALI', 'w').write(orig)
 else:
-    print('Could not find required strings in $CONTROLLER_SMALI -- it may have already been patched.')
+    print('Could not find required strings in $CONTROLLER_READ_SMALI -- it may have already been patched.')
+"
+        echo "Adding Bluetooth write logging"
+
+        BT_LOGGING_WRITE_BEFORE='invoke-virtual {p0, v0}, Lcom/tandemdiabetes/ble/daemon/Controller;->a(Lcom/tandemdiabetes/ble/daemon/g;)V'
+        BT_LOGGING_WRITE_CHECKSTRING='const-string v3, "BLEWRITE"'
+        BT_LOGGING_WRITE_ADDED='invoke-static {p1}, Lorg/apache/commons/codec/binary/Hex;->encodeHexString([B)Ljava/lang/String;
+    move-result-object v4
+    const-string v3, "BLEWRITE"
+    invoke-static {v3, v4}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I'
+        CONTROLLER_WRITE_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/ble/daemon/Controller.smali
+
+        python3 -c "
+orig = open('$CONTROLLER_WRITE_SMALI').read()
+before = '$BT_LOGGING_WRITE_BEFORE'
+checkstring = '$BT_LOGGING_WRITE_CHECKSTRING'
+after = '''$BT_LOGGING_WRITE_ADDED
+$BT_LOGGING_WRITE_BEFORE
+'''
+
+if before in orig and not checkstring in orig:
+    orig = orig.replace(before, after)
+    print('Added BT write logging')
+
+    open('$CONTROLLER_WRITE_SMALI', 'w').write(orig)
+else:
+    print('Could not find required strings in $CONTROLLER_WRITE_SMALI -- it may have already been patched.')
 "
 
     fi
@@ -436,11 +477,12 @@ KEYSTORE=debug.keystore
 if [ ! -f "$KEYSTORE" ]; then
     echo "Generating debug keystore at $KEYSTORE"
     echo "<!> When prompted, enter any password. You will be prompted to re-enter it when signing the APK."
+    echo "<!> For simplicity, you can input the word 'password'"
     echo "<!> All non-password fields are optional. Type 'yes' when asked if your input was correct."
 
     keytool -genkey -v -keystore "$KEYSTORE" -alias alias_name -keyalg RSA -keysize 2048 -validity 10000
 else
-    echo "Existing debug keystore found"
+    echo "<!> Existing debug keystore found. Please enter your existing keystore password (e.g. 'password')"
 fi
 
 echo "Signing patched APK..."
@@ -450,7 +492,8 @@ jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore "$KEYSTORE" "$P
 echo "Done! You can now install $PATCHED_APK on your device."
 echo ""
 echo "IMPORTANT: If you currently have a release version of the t:connect app installed,"
-echo "you MUST uninstall it before installing the patched version."
+echo "you MUST uninstall it before installing the patched version. This tool will attempt"
+echo "to do so automatically."
 echo ""
 echo "Please plug in your Android device and enable USB debugging in settings."
 echo ""
@@ -461,6 +504,21 @@ if [[ "$INSTALL_NOW" == "y" || "$INSTALL_NOW" == "Y" ]]; then
         echo "ERROR: You do not have adb installed, so cannot install the APK directly." 1>&2;
         echo "You can upload the apk file to your phone and install it manually." 1>&2;
     else
+        tmpfile=$(mktemp)
+        (adb shell dumpsys package "$EXPECTED_PACKAGE" 2>&1 | grep 'pkgFlags=') | tee $tmpfile
+        if grep -q "DEBUGGABLE" $tmpfile; then
+            echo "A patched t:connect application is already installed."
+        else
+            echo "<!> You have a non-patched version of t:connect application already installed."
+            read -p "<!> Can it be uninstalled now? [Y/n]" UNINSTALL
+            if [[ "$UNINSTALL" == "y" || "$UNINSTALL" == "Y" ]]; then
+                adb uninstall com.tandemdiabetes.tconnect
+                echo "OK, continuing to install patched APK"
+            else
+                echo "Warning, the application may not properly install"
+            fi
+        fi
+
         tmpfile=$(mktemp)
         (adb install $PATCHED_APK 2>&1 ) | tee $tmpfile
         if grep -q "INSTALL_FAILED_UPDATE_INCOMPATIBLE" $tmpfile; then
