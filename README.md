@@ -1,4 +1,8 @@
 # tconnectpatcher
+
+**December 2021 Update:** tconnectpatcher is now able to work around a Tandem bug which prevented v1.2 of the app from launching.
+Since tconnectpatcher has only supported app version 1.2, this allows quicker uploads in the t:connect app to be performed again.
+
 Tconnectpatcher patches the t:connect Android app to upload data via their API more frequently.
 It is written in bash, and should work on any Linux/Unix/MacOS system.
 In order to run the tool, you must have Python 3 and [apktool](https://ibotpeaches.github.io/Apktool/install/) installed.
