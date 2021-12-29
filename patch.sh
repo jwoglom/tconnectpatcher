@@ -39,7 +39,7 @@ APK_VERSION_1_4="1.4 (c8)"
 APK_VERSION_1_6="1.6 (11a)"
 EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2") # "$APK_VERSION_1_4" "$APK_VERSION_1_6")
 
-echo "   t:connect Patcher: version 1.4   "
+echo "   t:connect Patcher: version 1.5   "
 echo " github.com/jwoglom/tconnectpatcher "
 echo "------------------------------------"
 echo ""
@@ -359,6 +359,28 @@ else:
 "
 fi
 
+# APK version 1.2 no longer signs in. Remove certificate verification from Volley.newRequestQueue
+if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
+    VOLLEY_BEFORE='invoke-static {v0, v2}, Lcom/android/volley/toolbox/Volley;->newRequestQueue(Landroid/content/Context;Lcom/android/volley/toolbox/BaseHttpStack;)Lcom/android/volley/RequestQueue;'
+    VOLLEY_AFTER='invoke-static {v0}, Lcom/android/volley/toolbox/Volley;->newRequestQueue(Landroid/content/Context;)Lcom/android/volley/RequestQueue;'
+
+    NETWORK_SMALI=$EXTRACT_FOLDER/smali/com/tandemdiabetes/network/a.smali
+    python3 -c "
+orig = open('$NETWORK_SMALI').read()
+before = '$VOLLEY_BEFORE'
+after = '$VOLLEY_AFTER'
+
+if before in orig:
+    orig = orig.replace(before, after)
+    print('Patched Volley.newRequestQueue')
+
+    open('$NETWORK_SMALI', 'w').write(orig)
+else:
+    print('Could not find required strings in $NETWORK_SMALI -- it may have already been patched.')
+"
+
+fi
+
 if [[ "$PATCH_BT_LOGGING" == "y" ]]; then
     if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
 
@@ -366,7 +388,6 @@ if [[ "$PATCH_BT_LOGGING" == "y" ]]; then
         BT_LOGGING_CHECKSTRING='const-string v4, "BLEREAD"'
         BT_LOGGING_ADDED='invoke-static {v2}, Lorg/apache/commons/codec/binary/Hex;->encodeHexString([B)Ljava/lang/String;
     move-result-object v5
-    invoke-static {v1, v2}, Ltest$Log;->w(Ljava/lang/String;Ljava/lang/String;)V
     const-string v4, "BLEREAD"
     invoke-static {v4, v5}, Landroid/util/Log;->d(Ljava/lang/String;Ljava/lang/String;)I'
 
