@@ -474,20 +474,39 @@ fi
 
 KEYSTORE=debug.keystore
 
+if [[ "$KEYSTORE_TYPE" == "" ]]; then
+    KEYSTORE_TYPE=SHA1
+fi
+
 if [ ! -f "$KEYSTORE" ]; then
     echo "Generating debug keystore at $KEYSTORE"
     echo "<!> When prompted, enter any password. You will be prompted to re-enter it when signing the APK."
     echo "<!> For simplicity, you can input the word 'password'"
     echo "<!> All non-password fields are optional. Type 'yes' when asked if your input was correct."
 
-    keytool -genkey -v -keystore "$KEYSTORE" -alias alias_name -keyalg RSA -keysize 2048 -validity 10000
+    if [[ "$KEYSTORE_TYPE" == "SHA1" ]]; then
+        keytool -genkey -v -keystore "$KEYSTORE" -alias alias_name -keyalg RSA -keysize 2048 -validity 10000
+    elif [[ "$KEYSTORE_TYPE" == "MD5" ]]; then
+        keytool -genkey -v -keystore "$KEYSTORE" -alias alias_name -sigalg MD5withRSA -keyalg RSA -keysize 1024 -validity 10000
+    else
+        echo "ERROR: unknown KEYSTORE_TYPE: $KEYSTORE_TYPE"
+        exit -1
+    fi
 else
     echo "<!> Existing debug keystore found. Please enter your existing keystore password (e.g. 'password')"
 fi
 
 echo "Signing patched APK..."
 echo "<!> When prompted, enter the password for $KEYSTORE"
-jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore "$KEYSTORE" "$PATCHED_APK" alias_name
+if [[ "$KEYSTORE_TYPE" == "SHA1" ]]; then
+    jarsigner -verbose -sigalg SHA1withRSA -digestalg SHA1 -keystore "$KEYSTORE" "$PATCHED_APK" alias_name
+elif [[ "$KEYSTORE_TYPE" == "MD5" ]]; then
+    jarsigner -verbose -sigalg MD5withRSA -digestalg SHA1 -keystore "$KEYSTORE" "$PATCHED_APK" alias_name
+else
+    echo "ERROR: unknown KEYSTORE_TYPE: $KEYSTORE_TYPE"
+    exit -1
+fi
+    
 
 echo "Done! You can now install $PATCHED_APK on your device."
 echo ""
