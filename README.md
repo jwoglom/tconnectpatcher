@@ -3,15 +3,26 @@
 **December 2021 Update:** tconnectpatcher is now able to work around a Tandem bug which prevented v1.2 of the app from launching.
 Since tconnectpatcher has only supported app version 1.2, this allows quicker uploads in the t:connect app to be performed again.
 
+## Prerequisites
+
 Tconnectpatcher patches the t:connect Android app to upload data via their API more frequently.
 It is written in bash, and should work on any Linux/Unix/MacOS system.
 In order to run the tool, you must have Python 3 and [apktool](https://ibotpeaches.github.io/Apktool/install/) installed.
 
 To generate a "patched" APK, a valid APK of the [t:connect Android application](https://play.google.com/store/apps/details?id=com.tandemdiabetes.tconnect) must be provided.
 Currently only version 1.2, released in September 2020, is supported.
-You can extract this APK from an Android phone which has the application installed from the Play Store, [or find it on the internet](http://google.com/search?q=com.tandemdiabetes.tconnect+1.2+android+apk).
+You can extract this APK from an Android phone which has the application installed from the Play Store, [or find it on the internet](http://google.com/search?q=com.tandemdiabetes.tconnect+1.2+android+apk via one of the standard APK mirrors.  Make sure to download version 1.2).
 
-Once you have the APK, clone and cd into the repository and run `./patch.sh path/to/downloaded.apk`
+Once you have the APK downloaded, clone this repository and cd into your repository and run the next command you see.  If you don't know how to clone a repo, you can download the patch.sh file listed in this repo and store it on the computer you are going to be running these commands.
+
+`./patch.sh path/to/downloaded.apk` 
+
+where download.apk is the name of the file you extraced or downloaded.  You can always rename that filed to download.apk to make it even easier on yourself.
+
+To make this really simple you can move you patch.sh file and APK file into the same directory, open a Terminal / SSH connection, cd into that directory and run:
+`./patch.sh downloaded.apk` 
+
+Yes, you include the ./ before patch.sh even though you are in the same directory.
 
 You'll be asked:
 
@@ -29,7 +40,6 @@ You'll be prompted about several options:
 * **Would you like to disable certificate verification?** If set, this allows you to look at outgoing HTTPS connections made by the app. Defaults to yes.
 * **How often (in minutes) should t:connect upload data to the cloud?** If you'd like to upload your pump data more frequently to the cloud, set this to, e.g., `5` or `15`
 * **Modify to log bluetooth data?** If set, all bluetooth reads and writes are logged to `adb logcat` with tags `BLEREAD` and `BLEWRITE`. For use in logging phone-pump Bluetooth communication. Defaults to true.
-
 
 ## Example
 
