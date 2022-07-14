@@ -11,18 +11,16 @@ In order to run the tool, you must have Python 3 and [apktool](https://ibotpeach
 
 To generate a "patched" APK, a valid APK of the [t:connect Android application](https://play.google.com/store/apps/details?id=com.tandemdiabetes.tconnect) must be provided.
 Currently only version 1.2, released in September 2020, is supported.
-You can extract this APK from an Android phone which has the application installed from the Play Store, [or find it on the internet](http://google.com/search?q=com.tandemdiabetes.tconnect+1.2+android+apk via one of the standard APK mirrors.  Make sure to download version 1.2).
+You can extract this APK from an Android phone which has the application installed from the Play Store, [or find it on the internet](http://google.com/search?q=com.tandemdiabetes.tconnect+1.2+android+apk) via one of the standard APK mirrors.  Make sure to download version 1.2.
 
-Once you have the APK downloaded, clone this repository and cd into your repository and run the next command you see.  If you don't know how to clone a repo, you can download the patch.sh file listed in this repo and store it on the computer you are going to be running these commands.
+Once you have the APK downloaded, open a Terminal and clone and cd into this repository. Or, download the `patch.sh` file (click on the file name and then the 'Raw' button) and cd to the folder where you downloaded that file.
 
-`./patch.sh path/to/downloaded.apk` 
-
-where download.apk is the name of the file you extraced or downloaded.  You can always rename that filed to download.apk to make it even easier on yourself.
-
-To make this really simple you can move you patch.sh file and APK file into the same directory, open a Terminal / SSH connection, cd into that directory and run:
-`./patch.sh downloaded.apk` 
-
-Yes, you include the ./ before patch.sh even though you are in the same directory.
+```bash
+$ git clone https://github.com/jwoglom/tconnectpatcher
+$ cd tconnectpatcher
+$ ./patch.sh path/to/downloaded.apk
+```
+Then run `./patch.sh path/to/downloaded.apk`, where `path/to/downloaded.apk` is the path of the file you extraced or downloaded. (Hint: You can drag the .apk file into the Terminal window to get the full path.) Alternatively, move the downloaded APK into the same `tconnectpatcher` directory as the `patch.sh` file, and then run `./patch.sh ./downloaded.apk`, replacing `downloaded.apk` with the name of the file.
 
 You'll be asked:
 
