@@ -37,7 +37,8 @@ EXPECTED_PACKAGE=com.tandemdiabetes.tconnect
 APK_VERSION_1_2="1.2"
 APK_VERSION_1_4="1.4 (c8)"
 APK_VERSION_1_6="1.6 (11a)"
-EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2") # "$APK_VERSION_1_4" "$APK_VERSION_1_6")
+APK_VERSION_2_1="2.1.3 (175rb)"
+EXPECTED_APK_VERSIONS=("$APK_VERSION_1_2" "$APK_VERSION_2_1") # "$APK_VERSION_1_4" "$APK_VERSION_1_6")
 
 echo "   t:connect Patcher: version 1.5   "
 echo " github.com/jwoglom/tconnectpatcher "
@@ -64,60 +65,26 @@ if [[ "$2" == "--advanced" ]]; then
     ADVANCED=y
 fi
 
+dir=$(dirname $INPUT_APK)
+if [[ "$dir" == "" ]]; then
+    dir=$(pwd)
+fi
+EXTRACT_FOLDER="${dir}/extract_$(basename $INPUT_APK | sed 's/.apk//')"
+
 echo "Input APK: $INPUT_APK"
+echo "Extract folder: $EXTRACT_FOLDER"
 echo ""
 echo "-------------------- PATCH OPTIONS --------------------"
 
 
-PATCH_DEBUGGABLE=y
-PATCH_SECURITY_CONFIG=y
-PATCH_BT_LOGGING=y
-if [[ "$ADVANCED" == "y" ]]; then
-    read -p "<!> Would you like to make the APK debuggable? [Y/n] " PATCH_DEBUGGABLE
-    if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_DEBUGGABLE" == "Y" || "$PATCH_DEBUGGABLE" == "" ]]; then
-        echo "Okay, making the APK debuggable."
-        PATCH_DEBUGGABLE=y
-    else
-        echo "Not making the APK debuggable."
-    fi
-    echo ""
-
-
-    read -p "<!> Would you like to disable certificate verification? [y/N] " PATCH_SECURITY_CONFIG
-    if [[ "$PATCH_SECURITY_CONFIG" == "y" || "$PATCH_SECURITY_CONFIG" == "Y" ]]; then
-        echo "Okay, updating the APK security configuration."
-        PATCH_SECURITY_CONFIG=y
-    else
-        echo "Not updating the APK security configuration."
-    fi
-    echo ""
-
-
-    read -p "<!> Modify to log bluetooth data? [y/N] " PATCH_BT_LOGGING
-    if [[ "$PATCH_BT_LOGGING" == "y" || "$PATCH_BT_LOGGING" == "Y" ]]; then
-        echo "Okay, will patch bluetooth logging."
-        PATCH_BT_LOGGING=y
-    else
-        echo "Not patching bluetooth logging."
-    fi
-    echo ""
+read -p "<!> Begin patch? Options will be presented after the APK is extracted. (Y/n)" BEGIN_PATCH
+if [[ "$BEGIN_PATCH" != "Y" && "$BEGIN_PATCH" != "y" ]]; then
+    echo "Exiting."
+    exit 0
 fi
-
-read -p "<!> How often (in minutes) should t:connect upload data to the cloud? [default: 60] " PATCH_UPLOAD_MINS
-if [[ "$PATCH_UPLOAD_MINS" == "60" ]]; then
-    echo "Will not update data upload rate."
-elif [[ "$PATCH_UPLOAD_MINS" == "" ]]; then
-    PATCH_UPLOAD_MINS=60
-    echo "Will not update data upload rate."
-else
-    echo "Okay, will change the data upload rate to $PATCH_UPLOAD_MINS minutes"
-fi
-echo ""
-
 
 echo "Beginning patch..."
 
-EXTRACT_FOLDER="extract_$(basename $INPUT_APK | sed 's/.apk//')"
 PATCHED_APK=$(basename $INPUT_APK | sed 's/.apk/-patched.apk/')
 
 echo "Extracting APK to $EXTRACT_FOLDER"
@@ -126,6 +93,10 @@ if [ -d "$EXTRACT_FOLDER" ]; then
     echo "Folder $EXTRACT_FOLDER already exists."
     read -p "<!> Do you want to delete it and re-extract? [y/N] " DO_EXTRACT
     if [[ "$DO_EXTRACT" == "y" || "$DO_EXTRACT" == "Y" ]]; then
+        if [[ "$EXTRACT_FOLDER" == "" || "$EXTRACT_FOLDER" == "/" ]]; then
+            echo "Sanity check failed for $EXTRACT_FOLDER"
+            exit 0
+        fi
         echo "Deleting $EXTRACT_FOLDER"
         rm -rf "$EXTRACT_FOLDER"
         DO_EXTRACT=y
@@ -180,6 +151,69 @@ else
     echo "Found APK version $APK_VERSION"
 fi
 
+# Patch defaults
+PATCH_DEBUGGABLE=y
+PATCH_SECURITY_CONFIG=y
+PATCH_BT_LOGGING=y
+PATCH_UPLOAD_MINS=60
+PATCH_MOBILE_BOLUS=n
+
+if [[ "$ADVANCED" == "y" ]]; then
+    read -p "<!> Would you like to make the APK debuggable? [Y/n] " PATCH_DEBUGGABLE
+    if [[ "$PATCH_DEBUGGABLE" == "y" || "$PATCH_DEBUGGABLE" == "Y" || "$PATCH_DEBUGGABLE" == "" ]]; then
+        echo "Okay, making the APK debuggable."
+        PATCH_DEBUGGABLE=y
+    else
+        echo "Not making the APK debuggable."
+    fi
+    echo ""
+
+
+    read -p "<!> Would you like to disable certificate verification? [y/N] " PATCH_SECURITY_CONFIG
+    if [[ "$PATCH_SECURITY_CONFIG" == "y" || "$PATCH_SECURITY_CONFIG" == "Y" ]]; then
+        echo "Okay, updating the APK security configuration."
+        PATCH_SECURITY_CONFIG=y
+    else
+        echo "Not updating the APK security configuration."
+    fi
+    echo ""
+
+
+    if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
+        read -p "<!> Modify to log bluetooth data? [y/N] " PATCH_BT_LOGGING
+        if [[ "$PATCH_BT_LOGGING" == "y" || "$PATCH_BT_LOGGING" == "Y" ]]; then
+            echo "Okay, will patch bluetooth logging."
+            PATCH_BT_LOGGING=y
+        else
+            echo "Not patching bluetooth logging."
+        fi
+        echo ""
+    fi
+fi
+
+if [[ "$APK_VERSION" == "$APK_VERSION_1_2" ]]; then
+    read -p "<!> How often (in minutes) should t:connect upload data to the cloud? [default: 60] " PATCH_UPLOAD_MINS
+    if [[ "$PATCH_UPLOAD_MINS" == "60" ]]; then
+        echo "Will not update data upload rate."
+    elif [[ "$PATCH_UPLOAD_MINS" == "" ]]; then
+        PATCH_UPLOAD_MINS=60
+        echo "Will not update data upload rate."
+    else
+        echo "Okay, will change the data upload rate to $PATCH_UPLOAD_MINS minutes"
+    fi
+    echo ""
+fi
+
+if [[ "$APK_VERSION" == "$APK_VERSION_2_1" ]]; then
+    read -p "<!> Patch mobile bolus compatibility check? [Y/n] " PATCH_MOBILE_BOLUS
+    if [[ "$PATCH_MOBILE_BOLUS" == "y" || "$PATCH_MOBILE_BOLUS" == "Y" ]]; then
+        echo "Okay, will patch mobile bolus compatibility."
+        PATCH_MOBILE_BOLUS=y
+    else
+        echo "Not patching mobile bolus compatibility."
+    fi
+    echo ""
+fi
 
 
 echo "Applying APK modifications..."
@@ -451,6 +485,15 @@ else:
 "
 
     fi
+fi
+
+if [[ "$APK_VERSION" == "$APK_VERSION_2_1" && "$PATCH_MOBILE_BOLUS" == "y" ]]; then
+    echo "Embedding frida"
+    cp ./frida/frida-gadget-15.2.2-android-arm.so $EXTRACT_FOLDER/lib/armeabi-v7a/frida-gadget.so
+    cp ./frida/frida-gadget-15.2.2-android-arm64.so $EXTRACT_FOLDER/lib/arm64-v8a/frida-gadget.so
+    cp ./frida/frida-gadget-15.2.2-android-x86.so $EXTRACT_FOLDER/lib/x86/frida-gadget.so
+    cp ./frida/frida-gadget-15.2.2-android-x86_64.so $EXTRACT_FOLDER/lib/x86_64/frida-gadget.so
+
 fi
 
 
